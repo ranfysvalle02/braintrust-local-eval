@@ -17,12 +17,13 @@ BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY", "sk-")
 os.environ["BRAINTRUST_API_KEY"] = BRAINTRUST_API_KEY
 
 # 2. Azure OpenAI Configuration
-AZURE_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "https://nnnn.openai.azure.com/")
+AZURE_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "https://.openai.azure.com/")
 AZURE_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "")
-AZURE_API_VERSION = "2024-02-15-preview"
+AZURE_API_VERSION = "2024-12-01-preview"
 
 # Deployment names must match those in your Azure AI Studio.
-AZURE_CHAT_DEPLOYMENT_NAME = "gpt-35-turbo"
+#AZURE_CHAT_DEPLOYMENT_NAME = "gpt-35-turbo"
+AZURE_CHAT_DEPLOYMENT_NAME = "o3-mini"
 # Add a deployment name for the model used to create embeddings for vector search.
 AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-ada-002" # Replace with your embedding model deployment
 
@@ -233,7 +234,6 @@ def run_rag_task(input_prompt: str) -> str:
                     }
                 ],
                 stream=False,
-                temperature=0.0,  # Set temperature to 0 for deterministic responses
                 response_format={"type": "json_object"}
             )
         return response.choices[0].message.content.strip()
@@ -243,6 +243,17 @@ def run_rag_task(input_prompt: str) -> str:
 
 
 # --- Braintrust Evaluation ---
+# Define a shared dataset for both local validation and Braintrust evaluation.
+TEST_DATASET = [
+    {
+        "input": "how do i request a domain to be whitelisted?",
+        "expected": "To request a domain to be whitelisted, please ensure you have your manager's approval. Once you have that, you can proceed with the request. Note that only Enterprise Accounts may be whitelisted, and the domain send limit uses a 24-hour rolling period. If you have previously whitelisted a domain, it does not guarantee it won't be blacklisted in the future.",
+    },
+    {
+        "input": "What is the capital of France?",
+        "expected": "The capital of France is Paris.",
+    },
+]
 
 def run_eval():
     """Sets up and runs the Braintrust evaluation for the RAG task."""
@@ -254,17 +265,44 @@ def run_eval():
     eval_name = "Azure-OpenAI-RAG-Factuality-Check"
     Eval(
       eval_name,
-      data=lambda: [
-          {
-              "input": "how do i request a domain to be whitelisted?",
-              "expected": "To request a domain to be whitelisted, please ensure you have your manager's approval. Once you have that, you can proceed with the request. Note that only Enterprise Accounts may be whitelisted, and the domain send limit uses a 24-hour rolling period. If you have previously whitelisted a domain, it does not guarantee it won't be blacklisted in the future.",
-          },
-      ],
+      data=lambda: TEST_DATASET, # Use the shared dataset for evaluation
       task=run_rag_task, # The task now performs the entire RAG workflow
       scores=[Factuality],
     )
     print(f"Evaluation complete. Check your Braintrust dashboard for the '{eval_name}' project.")
+def validate_locally():
+    """
+    Runs the RAG task on a local dataset and prints the 'expected' vs 'got'
+    output directly to the console for immediate validation.
+    """
+    print("--- Starting Local Validation ---")
 
+    # 1. Iterate through each test case in the dataset
+    for i, item in enumerate(TEST_DATASET):
+        print(f"\n{'='*10} Test Case {i+1} {'='*10}")
+        input_prompt = item["input"]
+        expected_output = item["expected"]
+
+        # 2. Get the actual ("got") output from your RAG task
+        got_output = run_rag_task(input_prompt)
+
+        # 3. Print the results for comparison
+        print("\n--- Comparison ---")
+        print(f"INPUT:    {input_prompt}")
+        print(f"EXPECTED: {expected_output}")
+        print(f"GOT:      {got_output}")
+        print(f"{'='*33}")
+
+        # 4. Optional: A simple programmatic check.
+        # Note: For LLM outputs, a direct string comparison (==) is often too strict
+        # because valid answers can be phrased differently. The `Factuality` scorer
+        # you use in Braintrust performs a more sophisticated, semantic comparison.
+        if expected_output.lower() in str(got_output).lower():
+             print("RESULT:   Contains expected text.")
+        else:
+             print("RESULT:   Does NOT contain expected text.")
 if __name__ == "__main__":
     run_eval()
+    # Option 1: Run the local validation to see "expected vs. got" in your console.
+    validate_locally()
 ```
