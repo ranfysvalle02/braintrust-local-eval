@@ -1,10 +1,8 @@
 # braintrust-local-eval
 
+
 ---
 
-Of course\! Here is a comprehensive README for the provided Python script.
-
------
 
 # RAG Pipeline Evaluation with Braintrust, Azure OpenAI, and MongoDB
 
